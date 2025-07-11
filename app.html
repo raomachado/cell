@@ -100,7 +100,7 @@
           
           const material = new THREE.PointsMaterial({
               color: 0xffffff,
-              size: 1.5,
+              size: 5, // MODIFIED: Star size set to 5
               map: sprite,
               transparent: true,
               blending: THREE.AdditiveBlending,
@@ -123,17 +123,19 @@
       orbitCtrl.enableDamping = true;
       orbitCtrl.dampingFactor = 0.05;
       orbitCtrl.autoRotate = true;
-      orbitCtrl.autoRotateSpeed = 0.5;
+      orbitCtrl.autoRotateSpeed = 2; // MODIFIED: Rotation speed set to 2
 
       const textureLoader = new THREE.TextureLoader();
       // Using public URLs for textures
       const textureBaseUrl = "https://raw.githubusercontent.com/jeromeetienne/threex.planets/master/images/";
       const starSprite = textureLoader.load("https://threejs.org/examples/textures/sprites/disc.png");
-      const colorMap = textureLoader.load("https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/colors.png");
+      const colorMap = textureLoader.load("https://upload.wikimedia.org/wikipedia/commons/7/72/Color_map_fs.png");
       const elevMap = textureLoader.load(`${textureBaseUrl}earthbump1k.jpg`);
       const alphaMap = textureLoader.load(`${textureBaseUrl}earthspec1k.jpg`);
 
       const globeGroup = new THREE.Group();
+      // MODIFIED: Set initial size to 70%
+      globeGroup.scale.set(0.7, 0.7, 0.7);
       scene.add(globeGroup);
 
       // Optional: wireframe sphere inside
@@ -163,7 +165,7 @@
           vec3 vNormal = normalMatrix * normal;
           vVisible = step(0.0, dot( -normalize(mvPosition.xyz), normalize(vNormal)));
           // Displace points based on elevation map
-          mvPosition.xyz += normalize(mvPosition.xyz) * elv * 0.1;
+          mvPosition.xyz += normalize(mvPosition.xyz) * elv * 0.1; // MODIFIED: Elevation is 0.1
           gl_PointSize = size * (1.0 / -mvPosition.z); // Make points smaller when further away
           gl_Position = projectionMatrix * mvPosition;
         }
@@ -181,7 +183,7 @@
         }
       `;
       const uniforms = {
-        size: { value: 4.0 },
+        size: { value: 1.0 }, // MODIFIED: Point size set to 1.0
         colorTexture: { value: colorMap },
         elevTexture: { value: elevMap },
         alphaTexture: { value: alphaMap }
@@ -197,18 +199,43 @@
 
       const points = new THREE.Points(pointsGeo, pointsMat);
       globeGroup.add(points);
+      
+      // --- LIGHTING AND SPACE OBJECTS ---
+      // Soft ambient light
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
+      scene.add(ambientLight);
 
-      const hemiLight = new THREE.HemisphereLight(0xffffff, 0x080820, 3);
-      scene.add(hemiLight);
+      // Sun mesh
+      const sunGeometry = new THREE.SphereGeometry(0.5, 32, 32);
+      const sunMaterial = new THREE.MeshBasicMaterial({ color: 0xffddaa, emissive: 0xffddaa, emissiveIntensity: 2 });
+      const sun = new THREE.Mesh(sunGeometry, sunMaterial);
+      sun.position.set(-15, 5, -20);
+      scene.add(sun);
+      
+      // Point light from the sun
+      const pointLight = new THREE.PointLight(0xffffff, 1.5, 200);
+      pointLight.position.copy(sun.position);
+      scene.add(pointLight);
+
+      // Galaxy background
+      const galaxyTexture = textureLoader.load("https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/NGC_4414_%28NASA-med%29.jpg/1280px-NGC_4414_%28NASA-med%29.jpg");
+      const galaxyGeometry = new THREE.PlaneGeometry(200, 200);
+      const galaxyMaterial = new THREE.MeshBasicMaterial({
+          map: galaxyTexture,
+          side: THREE.BackSide,
+          transparent: true,
+          opacity: 0.4,
+          blending: THREE.AdditiveBlending
+      });
+      const galaxy = new THREE.Mesh(galaxyGeometry, galaxyMaterial);
+      galaxy.position.z = -100;
+      scene.add(galaxy);
 
       const stars = getStarfield({ numStars: 4500, sprite: starSprite });
       scene.add(stars);
 
       function animate() {
         requestAnimationFrame(animate);
-        
-        // The OrbitControls auto-rotate handles the rotation
-        // globeGroup.rotation.y += 0.002;
         
         orbitCtrl.update();
         renderer.render(scene, camera);
