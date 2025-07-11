@@ -148,6 +148,10 @@
     <div id="info" class="map-overlay">
         <h2 class="text-lg font-bold mb-2 text-gray-800">Feature Data</h2>
         <div id="info-content" class="text-sm">Click a feature on the map to see its data.</div>
+        <!-- **NEW**: "DO IT" button added -->
+        <button id="do-it-btn" class="mt-4 w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed disabled:opacity-75 transition-colors">
+            DO IT
+        </button>
     </div>
 
     <div id="layer-switcher" class="map-overlay">
@@ -163,7 +167,8 @@
             'tourism': '#cab2d6', 'historic': '#6a3d9a', 'power': '#fccde5', 'railway': '#bc80bd',
             'boundary': '#ccebc5', 'man_made': '#80b1d3', 'public_transport': '#fdb462', 'place': '#bebada',
         };
-        const MIN_ZOOM_FOR_FEATURES = 19;
+        // **UPDATED**: Zoom level for loading features changed to 17
+        const MIN_ZOOM_FOR_FEATURES = 17;
         const MAX_ZOOM_LEVEL = 19;
 
         // --- STYLING AND ORDERING ---
@@ -208,12 +213,14 @@
         // --- APPLICATION STATE ---
         let selectedFeature = null, isLoading = false;
         const vectorLayers = {};
+        let currentUserPositionCoords = null; // **NEW**: To store user's location
 
         // --- UI ELEMENTS ---
         const infoPanel = document.getElementById('info'), infoContent = document.getElementById('info-content');
         const layerPanel = document.getElementById('layer-switcher'), layerListContainer = document.getElementById('layers-list');
         const loader = document.getElementById('loader');
         const toggleLayersBtn = document.getElementById('toggle-layers'), toggleInfoBtn = document.getElementById('toggle-info');
+        const doItBtn = document.getElementById('do-it-btn');
 
         // --- MAP INITIALIZATION ---
         const rasterLayer = new ol.layer.Tile({ source: new ol.source.OSM() });
@@ -226,7 +233,6 @@
         positionFeature.set('isGpsFeature', true);
 
         const accuracyFeature = new ol.Feature();
-        // **FIX**: Added a style for the accuracy circle to make it visible.
         accuracyFeature.setStyle(new ol.style.Style({
             fill: new ol.style.Fill({ color: 'rgba(56, 161, 243, 0.2)' }),
             stroke: new ol.style.Stroke({ color: 'rgba(56, 161, 243, 0.6)', width: 1 })
@@ -235,7 +241,7 @@
 
         const gpsLayer = new ol.layer.Vector({
             source: new ol.source.Vector({ features: [accuracyFeature, positionFeature] }),
-            zIndex: 100 // Ensure GPS is always on top
+            zIndex: 100
         });
         map.addLayer(gpsLayer);
 
@@ -243,24 +249,23 @@
         navigator.geolocation.watchPosition(
             (pos) => {
                 const coords = [pos.coords.longitude, pos.coords.latitude];
-                const accuracy = ol.geom.Polygon.fromCircle(new ol.geom.Circle(ol.proj.fromLonLat(coords), 30), 100);
+                currentUserPositionCoords = ol.proj.fromLonLat(coords); // **NEW**: Store projected coordinates
+                
+                const accuracy = ol.geom.Polygon.fromCircle(new ol.geom.Circle(currentUserPositionCoords, 30), 100);
                 accuracyFeature.setGeometry(accuracy);
-                positionFeature.setGeometry(new ol.geom.Point(ol.proj.fromLonLat(coords)));
+                positionFeature.setGeometry(new ol.geom.Point(currentUserPositionCoords));
                 
                 if (firstLocationUpdate) {
-                    view.animate({ center: ol.proj.fromLonLat(coords), zoom: 18, duration: 1000 });
+                    view.animate({ center: currentUserPositionCoords, zoom: 18, duration: 1000 });
                     firstLocationUpdate = false;
                 }
             },
             (error) => {
-                // **FIX**: Provide user-facing feedback on error.
                 let errorMessage = 'Error: The Geolocation service failed.';
                 if (error.code === 1) {
                     errorMessage = 'Error: Geolocation permission denied. Please enable location services in your browser settings.';
                 }
                 console.error(errorMessage, error);
-                // In a real app, you'd want a nicer modal, but an alert is clear for this example.
-                // Using a custom div instead of alert()
                 const errorDiv = document.createElement('div');
                 errorDiv.style.position = 'absolute';
                 errorDiv.style.top = '50%';
@@ -274,7 +279,6 @@
                 errorDiv.textContent = errorMessage;
                 document.body.appendChild(errorDiv);
                 setTimeout(() => errorDiv.remove(), 5000);
-
             },
             { enableHighAccuracy: true }
         );
@@ -327,7 +331,7 @@
                 selectedFeature = null;
             }
             const feature = map.forEachFeatureAtPixel(event.pixel, (f) => {
-                if (!f.get('isGpsFeature')) return f; // Ignore GPS features
+                if (!f.get('isGpsFeature')) return f;
             });
             if (feature) {
                 selectedFeature = feature;
@@ -341,7 +345,27 @@
                 }
                 content += '</table>';
                 infoContent.innerHTML = content;
+                
+                // **NEW**: Logic to enable/disable button based on distance
+                if (currentUserPositionCoords) {
+                    const featureGeom = feature.getGeometry();
+                    const closestPoint = featureGeom.getClosestPoint(currentUserPositionCoords);
+                    const dx = closestPoint[0] - currentUserPositionCoords[0];
+                    const dy = closestPoint[1] - currentUserPositionCoords[1];
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance <= 30) {
+                        doItBtn.disabled = false;
+                    } else {
+                        doItBtn.disabled = true;
+                    }
+                } else {
+                    // Disable button if we don't have a location yet
+                    doItBtn.disabled = true;
+                }
+
                 infoPanel.classList.add('is-visible');
+
             } else {
                 infoPanel.classList.remove('is-visible');
             }
@@ -351,11 +375,11 @@
         // --- DYNAMIC UI SETUP ---
         toggleLayersBtn.addEventListener('click', () => {
             layerPanel.classList.toggle('is-visible');
-            infoPanel.classList.remove('is-visible'); // Hide other panel
+            infoPanel.classList.remove('is-visible');
         });
         toggleInfoBtn.addEventListener('click', () => {
             infoPanel.classList.toggle('is-visible');
-            layerPanel.classList.remove('is-visible'); // Hide other panel
+            layerPanel.classList.remove('is-visible');
         });
         function setupLayersAndControls() {
             Object.keys(osmLayerConfig).reverse().forEach(key => {
