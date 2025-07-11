@@ -226,6 +226,11 @@
         positionFeature.set('isGpsFeature', true);
 
         const accuracyFeature = new ol.Feature();
+        // **FIX**: Added a style for the accuracy circle to make it visible.
+        accuracyFeature.setStyle(new ol.style.Style({
+            fill: new ol.style.Fill({ color: 'rgba(56, 161, 243, 0.2)' }),
+            stroke: new ol.style.Stroke({ color: 'rgba(56, 161, 243, 0.6)', width: 1 })
+        }));
         accuracyFeature.set('isGpsFeature', true);
 
         const gpsLayer = new ol.layer.Vector({
@@ -247,14 +252,34 @@
                     firstLocationUpdate = false;
                 }
             },
-            () => { console.error("Error: The Geolocation service failed."); },
+            (error) => {
+                // **FIX**: Provide user-facing feedback on error.
+                let errorMessage = 'Error: The Geolocation service failed.';
+                if (error.code === 1) {
+                    errorMessage = 'Error: Geolocation permission denied. Please enable location services in your browser settings.';
+                }
+                console.error(errorMessage, error);
+                // In a real app, you'd want a nicer modal, but an alert is clear for this example.
+                // Using a custom div instead of alert()
+                const errorDiv = document.createElement('div');
+                errorDiv.style.position = 'absolute';
+                errorDiv.style.top = '50%';
+                errorDiv.style.left = '50%';
+                errorDiv.style.transform = 'translate(-50%, -50%)';
+                errorDiv.style.padding = '1em';
+                errorDiv.style.background = 'rgba(255, 0, 0, 0.8)';
+                errorDiv.style.color = 'white';
+                errorDiv.style.borderRadius = '8px';
+                errorDiv.style.zIndex = '1000';
+                errorDiv.textContent = errorMessage;
+                document.body.appendChild(errorDiv);
+                setTimeout(() => errorDiv.remove(), 5000);
+
+            },
             { enableHighAccuracy: true }
         );
 
         // --- FEATURE LOADING LOGIC ---
-        async function loadFeatures() { /* ... (omitted for brevity, same as before) ... */ }
-        // The loadFeatures function remains the same as the previous version.
-        // It's a large block of code and hasn't changed.
         async function loadFeatures() {
             if (isLoading) return;
             const currentZoom = view.getZoom();
